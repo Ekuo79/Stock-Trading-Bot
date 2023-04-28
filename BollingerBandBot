@@ -1,0 +1,61 @@
+import numpy as np
+import pandas as pd
+import yfinance as yf
+import pandas_datareader.data as web
+import pandas_ta as ta
+from datetime import date
+
+yf.pdr_override()
+symbols = 'AAPL'
+start_date = date(2022,6,20)
+end_date = date.today()
+
+def getData(stocks = symbols, start = start_date, end = end_date):
+  data = web.get_data_yahoo(stocks, start= start, end= end)
+  return data
+
+#price of stock currently
+stock = yf.Ticker("AAPL")
+price = stock.info['regularMarketPrice']
+
+data = getData(symbols)
+
+data.loc[date.today()] = [price,price,price, price,price,price]
+
+def bb_strategy(data):
+    bbBuy = []
+    bbSell = []
+    position = False
+    bb = ta.bbands(data['Adj Close'], length=20,std=2)
+    data = pd.concat([data, bb], axis=1).reindex(data.index)
+
+    for i in range(len(data)):
+        if data['Adj Close'][i] < data['BBL_20_2.0'][i]:
+            if position == False :
+                bbBuy.append(data['Adj Close'][i])
+                bbSell.append(np.nan)
+                position = True
+            else:
+                bbBuy.append(np.nan)
+                bbSell.append(np.nan)
+        elif data['Adj Close'][i] > data['BBU_20_2.0'][i]:
+            if position == True:
+                bbBuy.append(np.nan)
+                bbSell.append(data['Adj Close'][i])
+                position = False #To indicate that I actually went there
+            else:
+                bbBuy.append(np.nan)
+                bbSell.append(np.nan)
+        else :
+            bbBuy.append(np.nan)
+            bbSell.append(np.nan)
+
+    data['bb_Buy_Signal_price'] = bbBuy
+    data['bb_Sell_Signal_price'] = bbSell
+
+    return data
+
+data = bb_strategy(data)
+
+with pd.option_context('display.max_rows', None,'display.max_columns',None,'display.precision', 3):
+  print(data)
