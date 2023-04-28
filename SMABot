@@ -1,0 +1,85 @@
+import numpy as np
+import pandas as pd
+import yfinance as yf
+import pandas_datareader.data as web
+import pandas_ta as ta
+from datetime import date
+
+yf.pdr_override()
+symbols = 'AAPL'
+start_date = date(2021,6,20)
+end_date = date.today()
+
+def getData(stocks = symbols, start = start_date, end = end_date):
+  data = web.get_data_yahoo(stocks, data_source= 'yahoo', start= start, end= end)
+  return data
+
+#price of stock currently
+stock = yf.Ticker("AAPL")
+price = stock.info['regularMarketPrice']
+
+data = getData(symbols)
+data.loc[date.today()] = [price,price,price, price,price,price]
+
+
+
+data['SMA 30'] = ta.sma(data['Close'],30)
+data['SMA 100'] = ta.sma(data['Close'],100)
+
+
+
+def buys_sells(data, price):
+    signalBuy = []
+    signalSell = []
+    position = False 
+  
+    if data['SMA 30'][len(data) - 1] > data['SMA 100'][len(data) - 1]:
+      if position == False:
+        signalBuy.append("BUY")
+        signalBuy.append(price)
+        position = True
+      
+    elif data['SMA 30'][len(data) - 1] < data['SMA 100'][len(data) -1]:
+      if position == True:
+        signalSell.append("SELL")
+        signalSell.append(price)
+        position = False
+        
+    return [signalBuy, signalSell]
+
+print(price)
+print(buys_sells(data,price))
+
+def buy_sell(data):
+    signalBuy = []
+    signalSell = []
+    position = False 
+
+    for i in range(len(data)):
+        if data['SMA 30'][i] > data['SMA 100'][i]:
+            if position == False :
+                signalBuy.append(data['Adj Close'][i])
+                signalSell.append(-1)
+                position = True
+            else:
+                signalBuy.append(-1)
+                signalSell.append(-1)
+        elif data['SMA 30'][i] < data['SMA 100'][i]:
+            if position == True:
+                signalBuy.append(-1)
+                signalSell.append(data['Adj Close'][i])
+                position = False
+            else:
+                signalBuy.append(-1)
+                signalSell.append(-1)
+        else:
+            signalBuy.append(-1)
+            signalSell.append(-1)
+    return pd.Series([signalBuy, signalSell])
+  
+
+  
+data['Buy_Signal_price'], data['Sell_Signal_price'] = buy_sell(data)
+
+with pd.option_context('display.max_rows', None,'display.max_columns',None,'display.precision', 3):
+  print(data)
