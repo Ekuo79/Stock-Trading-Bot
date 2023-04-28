@@ -1,0 +1,66 @@
+import numpy as np
+import pandas as pd
+import yfinance as yf
+import pandas_datareader.data as web
+import pandas_ta as ta
+from datetime import date
+
+yf.pdr_override()
+symbols = 'AAPL'
+start_date = date(2022,6,20)
+end_date = date.today()
+
+def getData(stocks = symbols, start= start_date, end = end_date):
+  data = web.get_data_yahoo(stocks, start= start, end= end)
+  return data
+
+#price of stock currently
+stock = yf.Ticker("AAPL")
+price = stock.info['regularMarketPrice']
+
+data = getData(symbols)
+
+data.loc[date.today()] = [price,price,price, price,price,price]
+
+macd = ta.macd(data['Close'])
+data = pd.concat([data, macd], axis=1).reindex(data.index)
+
+def MACD_Strategy(df, risk):
+    MACD_Buy=[]
+    MACD_Sell=[]
+    position=False
+
+    for i in range(0, len(df)):
+        if df['MACD_12_26_9'][i] > df['MACDs_12_26_9'][i] :
+            MACD_Sell.append(np.nan)
+            if position ==False:
+                MACD_Buy.append(df['Adj Close'][i])
+                position=True
+            else:
+                MACD_Buy.append(np.nan)
+        elif df['MACD_12_26_9'][i] < df['MACDs_12_26_9'][i] :
+            MACD_Buy.append(np.nan)
+            if position == True:
+                MACD_Sell.append(df['Adj Close'][i])
+                position=False
+            else:
+                MACD_Sell.append(np.nan)
+        elif position == True and df['Adj Close'][i] < MACD_Buy[-1] * (1 - risk):
+            MACD_Sell.append(df["Adj Close"][i])
+            MACD_Buy.append(np.nan)
+            position = False
+        elif position == True and df['Adj Close'][i] < df['Adj Close'][i - 1] * (1 - risk):
+            MACD_Sell.append(df["Adj Close"][i])
+            MACD_Buy.append(np.nan)
+            position = False
+        else:
+            MACD_Buy.append(np.nan)
+            MACD_Sell.append(np.nan)
+
+    data['MACD_Buy_Signal_price'] = MACD_Buy
+    data['MACD_Sell_Signal_price'] = MACD_Sell
+
+MACD_strategy = MACD_Strategy(data, 0.025)
+
+with pd.option_context('display.max_rows', None,'display.max_columns',None,'display.precision', 3):
+  print(data)
