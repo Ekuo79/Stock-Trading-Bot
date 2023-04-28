@@ -1,0 +1,243 @@
+import pandas as pd
+import yfinance as yf
+import pandas_datareader.data as web
+import pandas_ta as ta
+from datetime import date
+import alpaca_trade_api as tradeapi
+import pandas_datareader as pdr
+from nsepy import get_quote
+
+
+
+API_KEY = "PKNVNYOE6NDXHRP3M98H"
+SECRET_KEY = "Md9Le3zNJDOegYa3jgEofbEeebNlLDLlt3j7OuUJ"
+
+api = tradeapi.REST(API_KEY, SECRET_KEY, base_url='https://paper-api.alpaca.markets')
+account = api.get_account()
+positions = api.list_positions()
+
+
+stocks = ['AAPL', 'ABNB', 'ADBE', 'NFLX', 'MSFT', 'AMZN', 'SPY']
+
+contents = []
+'''with open('history.txt', 'r') as file:
+    contents_RAW = file.read()
+    contents_SEPERATED = contents_RAW.split('\n')
+    for i in range(len(contents_SEPERATED)):
+        contents += contents_SEPERATED[i].split(',')
+    print(contents)
+'''
+
+
+for symbol in stocks:
+    if symbol in positions:
+        position = True
+        print(f'position in {symbol}')
+    else:
+        position = False
+
+    yf.pdr_override()
+    start_date = date(2022, 8, 1)
+    end_date = date.today()
+
+
+
+    # Get the current stock price for INFY
+    quote = get_quote("AAPL")
+
+    # Extract the current stock price from the quote object
+    price = quote['lastPrice']
+
+    # Print the current stock price
+    print(price)
+
+    def getData(stocks=symbol, start=start_date, end=end_date):
+        data = web.get_data_yahoo(symbol, start=start, end=end)
+        return data
+
+
+
+
+    data = getData(symbol)
+    data.loc[date.today()] = [price, price, price, price, price, price]
+
+    data['SMA 30'] = ta.sma(data['Close'], 30)
+    data['SMA 100'] = ta.sma(data['Close'], 100)
+
+
+    def buy_sell(data):
+        signalBuy = []
+        signalSell = []
+        position = False
+
+        for i in range(len(data)):
+            if data['SMA 30'][i] > data['SMA 100'][i]:
+                if position == False:
+                    signalBuy.append(data['Adj Close'][i])
+                    signalSell.append(-1)
+                    position = True
+                else:
+                    signalBuy.append(-1)
+                    signalSell.append(-1)
+            elif data['SMA 30'][i] < data['SMA 100'][i]:
+                if position == True:
+                    signalBuy.append(-1)
+                    signalSell.append(data['Adj Close'][i])
+                    position = False
+                else:
+                    signalBuy.append(-1)
+                    signalSell.append(-1)
+            else:
+                signalBuy.append(-1)
+                signalSell.append(-1)
+        return pd.Series([signalBuy, signalSell])
+
+
+    data['Buy_Signal_price'], data['Sell_Signal_price'] = buy_sell(data)
+
+
+    def bb_strategy(data):
+        bbBuy = []
+        bbSell = []
+        position = False
+        bb = ta.bbands(data['Adj Close'], length=20, std=2)
+        data = pd.concat([data, bb], axis=1).reindex(data.index)
+
+        for i in range(len(data)):
+            if data['Adj Close'][i] < data['BBL_20_2.0'][i]:
+                if position == False:
+                    bbBuy.append(data['Adj Close'][i])
+                    bbSell.append(-1)
+                    position = True
+                else:
+                    bbBuy.append(-1)
+                    bbSell.append(-1)
+            elif data['Adj Close'][i] > data['BBU_20_2.0'][i]:
+                if position == True:
+                    bbBuy.append(-1)
+                    bbSell.append(data['Adj Close'][i])
+                    position = False  # To indicate that I actually went there
+                else:
+                    bbBuy.append(-1)
+                    bbSell.append(-1)
+            else:
+                bbBuy.append(-1)
+                bbSell.append(-1)
+
+        data['bb_Buy_Signal_price'] = bbBuy
+        data['bb_Sell_Signal_price'] = bbSell
+
+        return data
+
+
+    data = bb_strategy(data)
+
+    macd = ta.macd(data['Close'])
+    data = pd.concat([data, macd], axis=1).reindex(data.index)
+
+
+    def MACD_Strategy(df, risk):
+        MACD_Buy = []
+        MACD_Sell = []
+        position = False
+
+        for i in range(0, len(df)):
+            if df['MACD_12_26_9'][i] > df['MACDs_12_26_9'][i]:
+                MACD_Sell.append(-1)
+                if position == False:
+                    MACD_Buy.append(df['Adj Close'][i])
+                    position = True
+                else:
+                    MACD_Buy.append(-1)
+            elif df['MACD_12_26_9'][i] < df['MACDs_12_26_9'][i]:
+                MACD_Buy.append(-1)
+                if position == True:
+                    MACD_Sell.append(df['Adj Close'][i])
+                    position = False
+                else:
+                    MACD_Sell.append(-1)
+            elif position == True and df['Adj Close'][i] < MACD_Buy[-1] * (1 - risk):
+                MACD_Sell.append(df["Adj Close"][i])
+                MACD_Buy.append(-1)
+                position = False
+            elif position == True and df['Adj Close'][i] < df['Adj Close'][i - 1] * (1 - risk):
+                MACD_Sell.append(df["Adj Close"][i])
+                MACD_Buy.append(-1)
+                position = False
+            else:
+                MACD_Buy.append(-1)
+                MACD_Sell.append(-1)
+
+        data['MACD_Buy_Signal_price'] = MACD_Buy
+        data['MACD_Sell_Signal_price'] = MACD_Sell
+
+
+    MACD_strategy = MACD_Strategy(data, 0.025)
+
+    with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.precision', 3):
+        print(data)
+
+        buySignalS = data['Buy_Signal_price'][len(data) - 1]
+        sellSignalS = data['Sell_Signal_price'][len(data) - 1]
+        print(f'SMA BUY indicates {buySignalS}')
+        print(f'SMA SELL indicates {sellSignalS}')
+
+
+        buySignalB = data['bb_Buy_Signal_price'][len(data) - 1]
+        sellSignalB = data['bb_Sell_Signal_price'][len(data) - 1]
+        print(f'BBands BUY indicates {buySignalB}')
+        print(f'BBands SELL indicates {sellSignalB}')
+
+
+        buySignalM = data['MACD_Buy_Signal_price'][len(data) - 1]
+        sellSignalM = data['MACD_Sell_Signal_price'][len(data) - 1]
+        print(f'MACD BUY indicates {buySignalM}')
+        print(f'MACD SELL indicates {sellSignalM}')
+
+
+    buyCounter = 0
+    sellCounter = 0
+    if buySignalB != -1:
+        buyCounter += 1
+
+    if buySignalS != -1:
+        buyCounter += 1
+
+    if buySignalM != -1:
+        buyCounter += 1
+
+    if sellSignalB != -1:
+        sellCounter += 1
+
+    if sellSignalS != -1:
+        sellCounter += 1
+
+    if sellSignalM != -1:
+        sellCounter += 1
+
+
+
+    if buyCounter > 1 and position == False:
+        moneyAmount = int(account.buying_power) * 0.1
+        quantity = moneyAmount // price
+        api.submit_order(
+            symbol=symbol,
+            qty=quantity,
+            side='buy',
+            type='market',
+            time_in_force='gtc'
+        )
+        print(f'Bought {quantity} shares of {symbol} at {price}')
+        position = True
+
+    if sellCounter > 1 and position == True:
+        api.submit_order(symbol=symbol,
+                         side='sell',
+                         type='market',
+                         time_in_force='gtc')
+
+        print(f'Sold all shares of {symbol} at {price}')
+
+
+
+
