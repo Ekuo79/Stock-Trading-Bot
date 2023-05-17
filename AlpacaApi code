@@ -169,6 +169,6 @@ while True:
     # Check if any scheduled tasks need to be executed
     schedule.run_pending()
 
-    # Wait for one second before checking again
+    # Wait for 300 seconds before checking again
     time.sleep(300)
     print('checked')
