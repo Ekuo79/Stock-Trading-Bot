@@ -11,8 +11,8 @@ import datetime
 
 def runCode():
   #set up alpaca account
-  API_KEY = "PKNVNYOE6NDXHRP3M98H"
-  SECRET_KEY = "Md9Le3zNJDOegYa3jgEofbEeebNlLDLlt3j7OuUJ"
+  API_KEY = ""
+  SECRET_KEY = ""
   api = tradeapi.REST(API_KEY, SECRET_KEY, base_url='https://paper-api.alpaca.markets')
   account = api.get_account()
   positions = api.list_positions()
